@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=PrintBoard
+Comment=Dashboard für Klipper/Moonraker-Drucker
+Exec=printboard
+Icon=printboard
+Categories=Utility;
+Terminal=false

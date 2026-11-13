@@ -1,0 +1,23 @@
+[project]
+name = "printboard"
+version = "0.3.0"
+description = "Multi-printer fleet dashboard for Klipper/Moonraker and Bambu Lab"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.9"
+dependencies = ["PySide6>=6.5"]
+
+[project.scripts]
+printboard = "printboard.app:main"
+printboard-server = "printboard.server:run_server"
+printboard-client = "printboard.client:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["printboard"]
+
+[tool.setuptools.package-data]
+printboard = ["icon.svg", "web/*"]
