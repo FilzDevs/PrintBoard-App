@@ -83,15 +83,20 @@ class TestStudioFeatures(unittest.TestCase):
         base = f"http://127.0.0.1:{port}"
         try:
             # 1. GET / index.html and static assets
+            import re
             with urllib.request.urlopen(f"{base}/", timeout=5) as r:
                 html = r.read().decode("utf-8")
                 self.assertIn("PrintBoard Studio", html)
-            with urllib.request.urlopen(f"{base}/styles.css", timeout=5) as r:
+            css_match = re.search(r'href="(/assets/[^"]+\.css)"', html)
+            js_match = re.search(r'src="(/assets/[^"]+\.js)"', html)
+            self.assertIsNotNone(css_match)
+            self.assertIsNotNone(js_match)
+            with urllib.request.urlopen(f"{base}{css_match.group(1)}", timeout=5) as r:
                 css = r.read().decode("utf-8")
-                self.assertIn("--bg-root", css)
-            with urllib.request.urlopen(f"{base}/app.js", timeout=5) as r:
+                self.assertIn("--bg", css)
+            with urllib.request.urlopen(f"{base}{js_match.group(1)}", timeout=5) as r:
                 js = r.read().decode("utf-8")
-                self.assertIn("drawGcodeLayerCanvas", js)
+                self.assertGreater(len(js), 1000)
 
             # 2. GET /api/state
             with urllib.request.urlopen(f"{base}/api/state", timeout=5) as r:
@@ -127,6 +132,14 @@ class TestStudioFeatures(unittest.TestCase):
             with urllib.request.urlopen(f"{base}/api/gcode/analyze?filename=BenchTest.gcode", timeout=5) as r:
                 g_res = json.loads(r.read())
                 self.assertGreater(g_res["total_layers"], 5)
+
+            # 6. GET /api/models/search
+            with urllib.request.urlopen(f"{base}/api/models/search?q=gridfinity", timeout=10) as r:
+                m_res = json.loads(r.read())
+                self.assertTrue(m_res["ok"])
+                self.assertIn("items", m_res)
+                self.assertIn("platforms", m_res)
+                self.assertEqual(len(m_res["platforms"]), 6)
         finally:
             engine.running = False
             httpd.shutdown()

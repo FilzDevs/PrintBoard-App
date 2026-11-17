@@ -12,7 +12,5 @@ dist/
 .ruff_cache/
 .DS_Store
 .aider*
-AppDir/
-*.AppImage
-*.spec
-appimagetool*
+node_modules/
+*.tsbuildinfo

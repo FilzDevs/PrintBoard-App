@@ -16,7 +16,7 @@ import time
 from urllib.parse import parse_qs, urlparse
 import uuid
 
-from . import api, costs, library, notify, spoolman, store
+from . import api, costs, library, model_search, notify, spoolman, store
 from .pages import (
     S, models_dir, notify_cfg, set_local_printer_spool, set_spoolman_url,
     slicer_cmd, spoolman_url, local_printer_spool
@@ -146,6 +146,21 @@ class ServerEngine:
                     spools_map.get(int(sid)) if sid else None for sid in (st.get("slot_spool_ids") or [])
                 ]
 
+                # Populate flat telemetry fields for React UI compatibility alongside temps list
+                temps_list = st.get("temps") or []
+                if len(temps_list) >= 1:
+                    st.setdefault("nozzle_temp", temps_list[0][1])
+                    st.setdefault("nozzle_target", temps_list[0][2])
+                if len(temps_list) >= 2:
+                    st.setdefault("bed_temp", temps_list[1][1])
+                    st.setdefault("bed_target", temps_list[1][2])
+                if len(temps_list) >= 3:
+                    st.setdefault("chamber_temp", temps_list[2][1])
+                st.setdefault("print_duration", st.get("duration"))
+                st.setdefault("eta_seconds", st.get("remaining"))
+                st.setdefault("current_layer", st.get("layer"))
+                st.setdefault("flow_factor", st.get("extrude_factor"))
+
                 # Thumbnail base64
                 fname = st.get("filename") or ""
                 if fname:
@@ -167,10 +182,14 @@ class ServerEngine:
                     self.statuses[p.id] = st
                     if p.id not in self.temp_history:
                         self.temp_history[p.id] = deque(maxlen=90)
-                    if st.get("temps"):
+                    if temps_list:
                         self.temp_history[p.id].append({
                             "t": int(time.time()),
-                            "temps": st["temps"][:3],
+                            "temps": temps_list[:3],
+                            "nozzle": temps_list[0][1] if len(temps_list) >= 1 else 0.0,
+                            "nozzle_target": temps_list[0][2] if len(temps_list) >= 1 else 0.0,
+                            "bed": temps_list[1][1] if len(temps_list) >= 2 else 0.0,
+                            "bed_target": temps_list[1][2] if len(temps_list) >= 2 else 0.0,
                         })
             except Exception as e:
                 with self.lock:
@@ -353,6 +372,10 @@ class PrintBoardApiHandler(SimpleHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
 
+    def end_headers(self):
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+        super().end_headers()
+
     def _send_json(self, data, code=200):
         body = json.dumps(data).encode("utf-8")
         self.send_response(code)
@@ -434,6 +457,16 @@ class PrintBoardApiHandler(SimpleHTTPRequestHandler):
                 return self._send_json({"found": found})
             except Exception as e:
                 return self._send_json({"found": [], "error": str(e)})
+
+        if path == "/api/models/search":
+            q = (qs.get("q") or qs.get("query") or [""])[0]
+            site = (qs.get("site") or ["all"])[0]
+            sort = (qs.get("sort") or ["popular"])[0]
+            try:
+                res = model_search.search_models(query=q, site=site, sort=sort)
+                return self._send_json(res)
+            except Exception as e:
+                return self._send_json({"ok": False, "error": str(e), "items": []}, 500)
 
         if path == "/api/library/list":
             q = (qs.get("query") or [""])[0]
@@ -716,7 +749,7 @@ class PrintBoardApiHandler(SimpleHTTPRequestHandler):
             act = payload.get("action")
             fpath = payload.get("path", "")
             try:
-                if act == "open_slicer":
+                if act in ("open_slicer", "slice"):
                     used = library.open_in_slicer(fpath, slicer_cmd())
                     return self._send_json({"ok": True, "slicer": used})
                 if act == "upload_to_printer":
@@ -907,7 +940,14 @@ class PrintBoardApiHandler(SimpleHTTPRequestHandler):
                 vat_pct=float(payload.get("vat_pct", 19.0)),
                 copies=int(payload.get("copies", 1)),
             )
-            return self._send_json({"ok": True, "quote": res})
+            return self._send_json({
+                "ok": True,
+                "quote": res,
+                **res,
+                "base_cost": res["production_cost_eur"],
+                "net_price": res["net_price_eur"],
+                "gross_price": res["gross_price_eur"],
+            })
 
         # 8. Spoolman & Filament Drying Suite
         if path == "/api/spoolman/save":
@@ -1162,6 +1202,7 @@ def create_http_server(port=8080, host="0.0.0.0", web_dir=None, desktop_bridge=N
             super().__init__(*args, directory=str(web_dir), **kwargs)
 
     CustomHandler.engine = engine
+    ThreadingHTTPServer.allow_reuse_address = True
     server = ThreadingHTTPServer((host, int(port)), CustomHandler)
     server.engine = engine
     return server, engine

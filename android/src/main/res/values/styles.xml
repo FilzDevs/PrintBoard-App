@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="PrintBoardTheme" parent="android:Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">#080D14</item>
+        <item name="android:colorPrimary">#0C1420</item>
+        <item name="android:colorPrimaryDark">#080D14</item>
+        <item name="android:colorAccent">#38BDF8</item>
+        <item name="android:statusBarColor">#080D14</item>
+        <item name="android:navigationBarColor">#0C1420</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

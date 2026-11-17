@@ -1,6 +1,6 @@
 [project]
 name = "printboard"
-version = "0.3.0"
+version = "1.0.0"
 description = "Multi-printer fleet dashboard for Klipper/Moonraker and Bambu Lab"
 readme = "README.md"
 license = { text = "MIT" }
@@ -20,4 +20,4 @@ build-backend = "setuptools.build_meta"
 packages = ["printboard"]
 
 [tool.setuptools.package-data]
-printboard = ["icon.svg", "web/*"]
+printboard = ["icon.svg", "web/*", "web/assets/*"]
