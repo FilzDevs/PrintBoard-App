@@ -79,6 +79,7 @@ export const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    (window as unknown as { navigatePrintBoard?: (p: PageId) => void }).navigatePrintBoard = setPage;
     refresh();
     const timer = setInterval(refresh, 2000);
     const onKey = (e: KeyboardEvent) => {

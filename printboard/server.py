@@ -11,6 +11,7 @@ import json
 import logging
 import os
 from pathlib import Path
+import sys
 import threading
 import time
 from urllib.parse import parse_qs, urlparse
@@ -1192,7 +1193,10 @@ class PrintBoardApiHandler(SimpleHTTPRequestHandler):
 
 def create_http_server(port=8080, host="0.0.0.0", web_dir=None, desktop_bridge=None):
     if web_dir is None:
-        web_dir = Path(__file__).parent / "web"
+        cand = Path(__file__).parent / "web"
+        if not cand.exists() and getattr(sys, "_MEIPASS", None):
+            cand = Path(sys._MEIPASS) / "printboard" / "web"
+        web_dir = cand
     web_dir.mkdir(parents=True, exist_ok=True)
 
     engine = ServerEngine(desktop_bridge=desktop_bridge)

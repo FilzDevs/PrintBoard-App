@@ -33,7 +33,19 @@ from . import library
 from .pages import S, models_dir
 from .server import create_http_server
 
-ICON = Path(__file__).with_name("icon.svg")
+def _resolve_icon() -> Path:
+    local = Path(__file__).with_name("icon.svg")
+    if local.exists():
+        return local
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        cand = Path(meipass) / "printboard" / "icon.svg"
+        if cand.exists():
+            return cand
+    return local
+
+
+ICON = _resolve_icon()
 
 STATE_LABELS = {
     "printing": "Druck läuft",
@@ -319,8 +331,42 @@ class ModelBrowserDock(QWidget):
             )
 
 
+class _PopupInterceptorPage(QWebEnginePage):
+    """Intercepts target='_blank' / window.open() URLs from the 1:1 WebUI."""
+
+    def __init__(self, win: "Main"):
+        super().__init__(win)
+        self.win = win
+        self.urlChanged.connect(self._on_url)
+
+    def _on_url(self, url: QUrl):
+        s = url.toString()
+        if not s or s == "about:blank":
+            return
+        low = s.lower()
+        if any(dom in low for _, dom in SITES) or any(
+            d in low for d in ("printables.com", "makerworld.com", "thingiverse.com", "thangs.com", "myminifactory.com", "cults3d.com")
+        ):
+            self.win.open_model_browser(s)
+        else:
+            QDesktopServices.openUrl(url)
+        self.deleteLater()
+
+
+class StudioWebPage(QWebEnginePage):
+    """Custom WebEnginePage for the standalone 1:1 WebUI window."""
+
+    def __init__(self, win: "Main"):
+        super().__init__(win)
+        self.win = win
+        self.setBackgroundColor(QColor("#05080F"))
+
+    def createWindow(self, _type):
+        return _PopupInterceptorPage(self.win)
+
+
 class Main(QMainWindow):
-    """PrintBoard Studio 1.0 Main Desktop Window."""
+    """PrintBoard Studio 1.0 Main Standalone Window (Embedded Server + 1:1 WebUI Client)."""
 
     def __init__(self):
         super().__init__()
@@ -336,12 +382,13 @@ class Main(QMainWindow):
         self.server_thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
         self.server_thread.start()
 
-        # 2. Central Stacked Widget (Page 0: Studio WebEngine UI, Page 1: Native 3D Model Browser Dock)
+        # 2. Central Stacked Widget (Page 0: 1:1 WebUI Client, Page 1: Native 3D Model Browser Dock)
         self.stack = QStackedWidget(self)
         self.setCentralWidget(self.stack)
 
         self.studio_view = QWebEngineView(self)
-        self.studio_view.page().setBackgroundColor(QColor("#05080F"))
+        self.studio_page = StudioWebPage(self)
+        self.studio_view.setPage(self.studio_page)
         settings = self.studio_view.settings()
         settings.setAttribute(QWebEngineSettings.LocalContentCanAccessRemoteUrls, True)
         settings.setAttribute(QWebEngineSettings.ScrollAnimatorEnabled, True)
@@ -383,7 +430,9 @@ class Main(QMainWindow):
 
     def open_library_in_studio(self):
         self.stack.setCurrentWidget(self.studio_view)
-        self.studio_view.page().runJavaScript("if (window.navigate) { navigate('library'); }")
+        self.studio_view.page().runJavaScript(
+            "if (window.navigatePrintBoard) { window.navigatePrintBoard('library'); }"
+        )
 
     def _check_printer_notifications(self):
         try:

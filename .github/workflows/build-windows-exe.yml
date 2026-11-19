@@ -1,0 +1,80 @@
+name: Build Windows Portable EXE
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install PySide6 pyinstaller pillow
+          pip install --no-deps .
+
+      - name: Generate Windows .ico from icon.svg
+        run: |
+          python -c "
+          from pathlib import Path
+          from PySide6.QtCore import QSize
+          from PySide6.QtGui import QGuiApplication, QIcon
+          from PIL import Image
+          import io
+          app = QGuiApplication([])
+          icon = QIcon('printboard/icon.svg')
+          pix = icon.pixmap(QSize(256, 256))
+          from PySide6.QtCore import QBuffer, QIODevice
+          buf = QBuffer()
+          buf.open(QIODevice.WriteOnly)
+          pix.save(buf, 'PNG')
+          img = Image.open(io.BytesIO(bytes(buf.data())))
+          img.save('printboard.ico', format='ICO', sizes=[(256,256),(128,128),(64,64),(48,48),(32,32),(16,16)])
+          print('Generated printboard.ico:', Path('printboard.ico').stat().st_size, 'bytes')
+          "
+
+      - name: Build PrintBoard-Portable.exe (Standalone All-in-One)
+        run: |
+          pyinstaller `
+            --noconfirm `
+            --clean `
+            --onefile `
+            --windowed `
+            --name PrintBoard-Portable `
+            --icon printboard.ico `
+            --add-data "printboard/icon.svg;printboard" `
+            --add-data "printboard/web;printboard/web" `
+            --hidden-import printboard.api `
+            --hidden-import printboard.app `
+            --hidden-import printboard.bambu `
+            --hidden-import printboard.client `
+            --hidden-import printboard.costs `
+            --hidden-import printboard.library `
+            --hidden-import printboard.model_search `
+            --hidden-import printboard.notify `
+            --hidden-import printboard.pages `
+            --hidden-import printboard.server `
+            --hidden-import printboard.sim `
+            --hidden-import printboard.spoolman `
+            --hidden-import printboard.spoolman_ui `
+            --hidden-import printboard.store `
+            --hidden-import printboard.ui_theme `
+            printboard_entry.py
+
+      - name: Verify executable exists
+        shell: pwsh
+        run: |
+          Get-Item dist\PrintBoard-Portable.exe | Format-List Name, Length, FullName
+
+      - name: Upload PrintBoard-Portable.exe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PrintBoard-Portable-Windows
+          path: dist/PrintBoard-Portable.exe
+          retention-days: 30
